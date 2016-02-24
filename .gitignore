@@ -1,8 +1,11 @@
+.gitignore
 .eunit
 deps
 *.o
 *.beam
 *.plt
+*~
+*.jar
 erl_crash.dump
 ebin
 rel/example_project
