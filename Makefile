@@ -1,12 +1,20 @@
+!IF EXIST("C:\Windows")
+REBAR = escript.exe "C:\Windows\System32\rebar"
+!ELSE
 SHELL = /bin/bash
+REBAR = rebar
+!ENDIF
 
 jarfile = $(jar)
 
 all:
 	echo ok
 
+clean:
+    $(REBAR) clean
+
 build:
-	rebar compile
+	$(REBAR) compile
 
 tjar:
 	jar tf $(jarfile)
