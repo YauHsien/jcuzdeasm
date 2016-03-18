@@ -24,7 +24,7 @@ class(Cls) ->
 		     [] ->
 			 undefined;
 		     Itfs ->
-			 {implements, string:join(lists:map(fun(Itf) -> Itf#interface.name end, Itfs))}
+			 {implements, string:join(lists:map(fun(Itf) -> Itf#interface.name end, Itfs),", ")}
 		 end,
 		 ${
 	       ]),
@@ -85,7 +85,7 @@ sequence(List) ->
 				  (Atom) when is_atom(Atom) -> atom_to_list(Atom);
 				  ({ExIm, String}) when ExIm == extends
 							orelse ExIm == implements
-							-> string:join([ExIm, String], " ");
+							-> string:join([atom_to_list(ExIm), String], " ");
 				  (Char) when is_integer(Char) -> [Char];
 				  (Any) -> Any
 			       end,

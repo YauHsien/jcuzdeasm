@@ -113,7 +113,7 @@ build_class(Bin) ->
 
 		  end,
 		  {#class{}, undefined},
-		  string:tokens(binary:bin_to_list(Bin), [$\s])
+		  string:tokens(binary:bin_to_list(Bin), [$\s,$\r])
 		 )
      ).
 
@@ -121,11 +121,11 @@ build_class(Bin) ->
 build_interface(Bin) ->
     element(
       1,
-      lists:fold(fun(Access, {Itf, undefined}) when Access == "public"
+      lists:foldl(fun(Access, {Itf, undefined}) when Access == "public"
 						    orelse Access == "protected"
 						    orelse Access == "private"
 						    ->
-			 {Itf#interface{ access= list_to_atom(Access) }};
+			 {Itf#interface{ access= list_to_atom(Access) }, undefined};
 
 		    ("abstract", {Itf, undefined}) ->
 			 {Itf#interface{ abstract= abstract }, undefined};
@@ -141,7 +141,7 @@ build_interface(Bin) ->
 
 		    (Name, {Itf, interface}) ->
 			 {Package, Name1} = get_qualified_name(Name),
-			 {Itf#interface{ package= packeage, name= Name1 }, undefined};
+			 {Itf#interface{ package= Package, name= Name1 }, undefined};
 
 		    ("extends", {Itf, undefined}) ->
 			 {Itf, extends};
@@ -152,7 +152,7 @@ build_interface(Bin) ->
 
 		 end,
 		 {#interface{}, undefined},
-		 string:tokens(binary:bin_to_list(Bin), [$\s])
+		 string:tokens(binary:bin_to_list(Bin), [$\s,$\r])
 		)
      ).
 

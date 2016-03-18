@@ -59,7 +59,10 @@ asm2code(FileList) ->
     lists:map(fun(File) -> asm2code_1(File) end, FileList).
 
 asm2code_1(File) ->
-    file:write_file(to_java_file_name(File), list_to_binary(javasm:to_code(File))).
+    File1 = filename:join([element(2,file:get_cwd()), File]),
+    file:write_file(to_java_file_name(File1), list_to_binary(javasm:to_code(File1))).
 
 to_java_file_name(File) ->
-    string:join([filename:rootname(File), ".java"], "").
+    FN = string:join([filename:rootname(File), ".java"], ""),
+    io:fwrite("[generate] ~s~n", [FN]),
+    FN.
