@@ -7,7 +7,9 @@
 
 class(Cls) ->
     [ package(Cls#class.package),
-      imports(Cls#class.imports),
+      imports(
+          erlang:append([Cls#class.inherits|Cls#class.implements], Cls#class.imports)
+      ),
       sequence([ Cls#class.access,
 		 Cls#class.abstract,
 		 Cls#class.level,
@@ -36,7 +38,7 @@ class(Cls) ->
 
 interface(Itf) ->
     [ package(Itf#interface.package),
-      imports(Itf#interface.imports),
+      imports([Itf#interface.inherits|Itf#interface.imports]),
       sequence([ Itf#interface.access,
 		 Itf#interface.abstract,
 		 Itf#interface.level,
@@ -71,7 +73,9 @@ imports(List) ->
     lists:map(fun(#class{}= Cls) ->
 		      sequence([ import, qualified_name(Cls#class.package, Cls#class.name), $; ]);
 		 (#interface{}= Itf) ->
-		      sequence([ import, qualified_name(Itf#interface.package, Itf#interface.name), $; ])
+		      sequence([ import, qualified_name(Itf#interface.package, Itf#interface.name), $; ]);
+         (undefined) ->
+              []
 	      end,
 	      List).
 

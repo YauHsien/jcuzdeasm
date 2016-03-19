@@ -37,8 +37,8 @@ proc_line(<<"interface ", _/binary>>= Bin, {Prof, Cur}) ->
 proc_line(Bin, {Prof, Cur}) ->
 
     case { Cur
-	   , binary:match(Bin, [<<" class ">>, <<" class">>])
-	   , binary:match(Bin, [<<" interface ">>, <<" interface">>])
+	   , binary:match(Bin, [<<" class ">>])
+	   , binary:match(Bin, [<<" interface ">>])
 	   , binary:match(Bin, <<"/">>)
 	 } of
 	{undefined, ClassMatch, _, nomatch} when ClassMatch /= nomatch ->
@@ -96,20 +96,17 @@ build_class(Bin) ->
 		     ("implements", {Cls, undefined}) ->
 			  {Cls, implements};
 
-		     (Name, {Cls, implements}) ->
-			  {Package, Name1} = get_qualified_name(Name),
-			  {Cls#class{
-			     implements=
-				 lists:append(
-				   Cls#class.implements,
-				   [#interface{ package= Package, name= Name1 }]
-				  )},
-			   case lists:last(Name) of
-			       $, ->
-				   implements;
-			       _ ->
-				   undefined
-			   end}
+		     (Names, {Cls, implements}) ->
+                 Names1 = string:tokens(Names, [$,]),
+                 lists:foldl(fun(Name, {#class{}= Cls1, undefined}) ->
+                        {Package, Name1} = get_qualified_name(Name),
+                        {Cls1#class{
+                            implements= [#interface{ package= Package, name= Name1 }
+                                        |Cls1#class.implements]
+                        }, undefined}
+                     end,
+                     {Cls, undefined},
+                     Names1)
 
 		  end,
 		  {#class{}, undefined},
@@ -148,7 +145,9 @@ build_interface(Bin) ->
 
 		    (Name, {Itf, extends}) ->
 			 {Package, Name1} = get_qualified_name(Name),
-			 {Itf#interface{ package= Package, name= Name1 }, undefined}
+			 {Itf#interface{
+                 inherits= #interface{ package=Package, name=Name1 }
+              }, undefined}
 
 		 end,
 		 {#interface{}, undefined},
