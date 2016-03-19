@@ -1,10 +1,12 @@
-== Java Class Deassembler
+## Java Class Deassembler
 
 To deassemble and recontruct Java code from classes in Jar.
 
 ``jcuzdeasm`` is pronunciated as "Java class deassem(blying)".
 
-=== Usage
+### Usage
+
+Put ``.jar`` files into the folder ``priv/`` and use following command:
 
 * ``make xjar jar=<jar file>``: to extract files from a ``.jar`` file; files will be put in the temporary folder ``/tmp``.
 * ``make tjar jar=<jar file>``: to list files in a ``.jar`` file.
