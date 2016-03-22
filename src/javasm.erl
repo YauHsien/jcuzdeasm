@@ -36,24 +36,29 @@ proc_line(<<"interface ", _/binary>>= Bin, {Prof, Cur}) ->
 
 proc_line(Bin, {Prof, Cur}) ->
 
-    case { Cur
+    case { Cur, erlang:size(Bin),
 	   , binary:match(Bin, [<<" class ">>])
 	   , binary:match(Bin, [<<" interface ">>])
 	   , binary:match(Bin, <<"/">>)
+       , binary:match(Bin, <<"  ">>)
+       , binary:match(Bin, <<";">>)
 	 } of
-	{undefined, ClassMatch, _, nomatch} when ClassMatch /= nomatch ->
+	{undefined, _, ClassMatch, _, nomatch, _, _} when ClassMatch /= nomatch ->
 	    {Prof, build_class(Bin)};
 
-	{_, ClassMatch, _, nomatch} when ClassMatch /= nomatch ->
+	{_, _, ClassMatch, _, nomatch, _, _} when ClassMatch /= nomatch ->
 	    {Prof#profile{ classes= lists:append(Prof#profile.classes, [Cur]) }, build_class(Bin)};
 
-	{undefined, _, InterfaceMatch, nomatch} when InterfaceMatch /= nomatch ->
+	{undefined, _, _, InterfaceMatch, nomatch, _, _} when InterfaceMatch /= nomatch ->
 	    {Prof, build_interface(Bin)};
 
-	{_, _, InterfaceMatch, nomatch} when InterfaceMatch /= nomatch ->
+	{_, _, _, InterfaceMatch, nomatch, _, _} when InterfaceMatch /= nomatch ->
 	    {Prof#profile{ classes= lists:append(Prof#profile.classes, [Cur]) }, build_interface(Bin)};
 
-	{_, _, _, _} ->
+    {_, Len, _, _, _, {0,2}, {Pos,1}} when Cur /= undefined andalso Len =:= Pos+1 ->
+        {Prof, build_member(Cur, Bin)};
+
+	{_, _, _, _, _, _, _} ->
 	    {Prof, Cur}
     end.
 
@@ -65,16 +70,16 @@ build_class(Bin) ->
 						     orelse Access == "protected"
 						     orelse Access == "private"
 						     ->
-			  {Cls#class{ access= list_to_atom(Access) }, undefined};
+			  {Cls#class{ access= Access }, undefined};
 
 		     ("abstract", {Cls, undefined}) ->
-			  {Cls#class{ abstract= abstract }, undefined};
+			  {Cls#class{ abstract= "abstract" }, undefined};
 
 		     ("static", {Cls, undefined}) ->
-			  {Cls#class{ level= static }, undefined};
+			  {Cls#class{ level= "static" }, undefined};
 
 		     ("final", {Cls, undefined}) ->
-			  {Cls#class{ final= final }, undefined};
+			  {Cls#class{ final= "final" }, undefined};
 
 		     ("class", {Cls, undefined}) ->
 			  {Cls, class};
@@ -122,16 +127,16 @@ build_interface(Bin) ->
 						    orelse Access == "protected"
 						    orelse Access == "private"
 						    ->
-			 {Itf#interface{ access= list_to_atom(Access) }, undefined};
+			 {Itf#interface{ access= Access }, undefined};
 
 		    ("abstract", {Itf, undefined}) ->
-			 {Itf#interface{ abstract= abstract }, undefined};
+			 {Itf#interface{ abstract= "abstract" }, undefined};
 
 		    ("static", {Itf, undefined}) ->
-			 {Itf#interface{ level= static }, undefined};
+			 {Itf#interface{ level= "static" }, undefined};
 
 		    ("final", {Itf, undefined}) ->
-			 {Itf#interface{ final= final }, undefined};
+			 {Itf#interface{ final= "final" }, undefined};
 
 		    ("interface", {Itf, undefined}) ->
 			 {Itf, interface};
@@ -158,6 +163,129 @@ build_interface(Bin) ->
 get_qualified_name(Name) ->
     Name1 = string:tokens(Name, [$., $,]), % . for qualifying words, ',' for multiple interface
     {lists:droplast(Name1), lists:last(Name1)}.
+
+
+build_member(Cur, Bin) ->
+    {IM, IA} = case Cur of
+                   #class{} -> {#class.methods, #class.attributes};
+                   #interface{} -> {#interface.methods, #interface.attributes}
+               end,
+    case {erlang:size(Bin), binary:match(Bin, <<");">>)} of
+        {Len, Pos} when Len =:= Pos+2 ->
+            setelement(IM, Cur, [ build_method(Cur, Bin) |element(IM,Cur)]);
+        {_, _} ->
+            setelement(IA, Cur, [ build_attribute(Cur, Bin) |element(IA,Cur)])
+    end.
+
+build_method(Cur, Bin) ->
+    Cur1 = #method{},
+    Method = 
+        element(1,
+            lists:foldl(build_with(Cur1),
+                        {Cur1, undefined},
+                        string:tokens(binary:bin_to_list(Bin), [$\s,$\r])
+        )),
+    Val = [ Method | element(?IMethods(Cur), Cur) ],
+    setelement(?IMethods(Cur), Cur, Val).
+
+build_attribute(Cur, Bin) ->
+    Cur1 = #attribute{},
+    Attribute =
+        element(1,
+            lists:foldl(build_with(Cur1),
+                        {Cur1, undefined},
+                        string:tokens(binary:bin_to_list(Bin), [$\s,$\r])
+        )),
+    Val = [ Attribute | element(?IAttributes(Cur), Cur) ],
+    setelement(?IAttributes(Cur), Cur, Val).
+
+
+build_with(Cur) ->
+    
+    fun(Access, {Cur, undefined}) when Access == "public"
+                                       orelse Access == "private"
+                                       orelse Access == "protected" ->
+           {setelement(?IAccess(Cur), Cur, Access), qualified};
+           
+       ("abstract", {Cur, State}) -> when State == qualified
+                                          orelse State == undefined ->
+           {setelement(IAbstract(Cur), Cur, "abstract"), undefined};
+
+       ("static", {Cur, State}) when State == qualified
+                                     orelse State == undefined ->
+           {setelement(ILevel(Cur), Cur, "static"), undefined};
+           
+       ("final", {Cur, State}) when State == qualified
+                                    orelse State == undefined ->
+           {setelement(IFinal(Cur), Cur, "final"), undefined};
+           
+       ("interface", {Cur, State}) when State == qualified
+                                        orelse State == undefined ->
+           {Cur, interface};
+           
+       ("class", {Cur, State}) when State == qualified
+                                    orelse State == undefined ->
+           {Cur, class};
+           
+       (Name, {Cur, State}) when State == qualified
+                                 orelse State == undefined ->
+           case re:run(Name, "\\()") of
+               {match, [{_, 1}]} -> %% constructors
+                   Cur1 = build_method_open_part(Cur, Name),
+                   {Cur1, build_method_state(Name)};
+               nomatch ->
+                   {Package, Name} = get_qualified_name(TypeName),
+                   Type = #type{ package= Package, name= Name },
+                   {setelement(IType(Cur), Cur, Type), after_typing}
+           end;
+           
+       (ItfName, {#interface{}= Cur, interface}) ->
+           {Package, Name} = get_qualified_name(ItfName),
+           {Cur#interface{ package= Package, name= Name }, named};
+           
+       (ClsName, {#class{}= Cur, class}) ->
+           {Package, Name} = get_qualified_name(ClsName),
+           {Cur#class{ package= Package, name= Name }, named};
+           
+       (AtbName, {#attribute{}= Cur, after_typing}) ->
+           Name = string:join(string:tokens(AtbName, [$\;]), ""),
+           {setelement(?IName(Cur), Cur, Name), attribute_end};
+       
+       (MbrName, {#method{}= Cur, after_typing}) ->
+           Cur1 = build_method_open_part(Cur, MbrName),
+           {Cur1, build_method_state(Name)};
+
+       (Str, {#method{}= Cur, method_naming_open}) ->
+           {Package, Name} = get_qualified_name(Str),
+           Type = #type{ package= Package, name= Name },
+           Param = #parameter{ type= Type },
+           Params = Cur#method.parameters,
+           {Cur#method{ parameters= [ Param | Params ] }, build_method_state(Str)};
+           
+       ("throws", {#method{}= Cur, method_naming_closed}) ->
+           {Cur, throws};
+           
+       
+
+
+build_method_open_part(#method{}= Method, Str) ->
+    [Name1|Params] = string:tokens(Str, [$\(, $\,, $\), $\;]),
+    {_, Name2} = get_qualified_name(Name1),
+    Method1 = setelement(?IName(Method), Method, Name2),
+    case Params of
+        [] -> Method1;
+        [Param] ->
+            {Package, Name3} = get_qualified_name(Param),
+            Type = #type{ package= Package, name= Name },
+            NewParams = [ #parameter{ type= Type } | element(?IParameters(Method), Method) ],
+            setelement(?IParameters(Method1), Method1, NewParams)
+    end.
+    
+build_method_state(Str) ->
+    case re:run(Str, "\\)$") of
+        nomatch -> method_naming_open;
+        {match, [{_, _}]} -> method_naming_closed
+    end.
 
 
 proc_profile(Prof) ->
